@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-
 const endpoints = {
   "final-sequence": "/api/final-sequence-attack",
   "smart-fee": "/api/smart-fee-booster",
@@ -24,6 +23,11 @@ export default function AttackPanel() {
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // NEW: amount states
+  const [sendAmount, setSendAmount] = useState(50000); // Amount in satoshis (default: 50k sats)
+  const [usdAmount, setUsdAmount] = useState('');
+  const [btcRate, setBtcRate] = useState(null);
+
   async function generateWallet() {
     const res = await fetch("/api/generate-wallet", {
       method: "POST",
@@ -46,6 +50,29 @@ export default function AttackPanel() {
     }
   }
 
+  // NEW: convert USD -> sats using CoinGecko
+  async function convertUSDToSats() {
+    if (!usdAmount) return;
+    try {
+      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+      const data = await res.json();
+      const rate = data?.bitcoin?.usd;
+      if (!rate) {
+        alert('Failed to fetch BTC price');
+        return;
+      }
+      setBtcRate(rate);
+      const sats = Math.floor((parseFloat(usdAmount) / rate) * 1e8);
+      if (isNaN(sats)) {
+        alert('Invalid USD amount');
+        return;
+      }
+      setSendAmount(sats);
+    } catch (e) {
+      alert('Price conversion failed: ' + e.message);
+    }
+  }
+
   async function executeAttack() {
     setLoading(true);
     setResult("");
@@ -56,6 +83,7 @@ export default function AttackPanel() {
       attacker_address: attacker,
       network,
       fee_rate: feerate,
+      send_amount: sendAmount, // 👈 NEW
       merchant_nodes: merchantNodes
         .split("\n")
         .map((x) => x.trim())
@@ -166,6 +194,33 @@ export default function AttackPanel() {
           placeholder="bc1q... (victim address)"
         />
       </div>
+
+      {/* NEW: USD -> Sats conversion UI */}
+      <div style={{ marginTop: 8 }}>
+        <label>Amount in USD (optional):</label>
+        <input
+          type="number"
+          value={usdAmount}
+          onChange={e => setUsdAmount(e.target.value)}
+          style={{ width: 100, marginLeft: 8 }}
+          placeholder="10.00"
+        />
+        <button onClick={convertUSDToSats} style={{ marginLeft: 8 }}>Convert to Sats</button>
+        {btcRate && <span style={{ marginLeft: 10 }}>1 BTC = ${btcRate}</span>}
+      </div>
+
+      {/* NEW: send amount input */}
+      <div style={{ marginTop: 8 }}>
+        <label>Amount to Send (in sats):</label>
+        <input
+          type="number"
+          value={sendAmount}
+          onChange={e => setSendAmount(Number(e.target.value))}
+          style={{ width: 160, marginLeft: 8 }}
+          placeholder="50000"
+        />
+      </div>
+
       <div>
         <label>Fee Rate (sat/vB):</label>
         <input
@@ -210,3 +265,4 @@ export default function AttackPanel() {
     </div>
   );
 }
+
